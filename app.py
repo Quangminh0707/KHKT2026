@@ -307,7 +307,7 @@ Yêu cầu khi trả lời:
 """
 
     try:
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        model = genai.GenerativeModel('gemini-3.5-flash-lite')
         response = model.generate_content(prompt)
         ai_reply = response.text.strip()
     except Exception as e:
