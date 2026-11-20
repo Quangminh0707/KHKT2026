@@ -252,7 +252,12 @@ YÊU CẦU:
                 ai_answer = f"Chào bạn! Dưới đây là thông tin chi tiết:\n{noi_dung_best}\n\n📅 Thời gian: {status_time}"
 
         file_path = safe_str(best_doc.get("duong_dan_file", ""))
-        full_file_url = f"http://127.0.0.1:5000/{file_path}" if file_path else None
+if file_path:
+    # Chuẩn hóa dấu gạch chéo thành '/' để chạy tốt trên mọi hệ điều hành
+    clean_path = file_path.replace("\\", "/").lstrip("/")
+    full_file_url = f"/{clean_path}"
+else:
+    full_file_url = None
 
         return jsonify({
             "answer": ai_answer,
