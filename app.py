@@ -303,7 +303,7 @@ def upload_file():
             doc = Document(save_path)
             paragraphs = [p.text.strip() for p in doc.paragraphs if p.text.strip()]
             if paragraphs:
-                title_text = paragraphs[:90].strip()
+                title_text = paragraphs[0][:90].strip()
                 doc_text = " ".join(paragraphs)
         except Exception as e:
             return jsonify({"success": False, "message": f"Lỗi đọc file Word: {e}"}), 500
@@ -322,7 +322,7 @@ def upload_file():
                 doc_text = " ".join(pdf_pages_text)
                 lines = [l.strip() for l in pdf_pages_text.splitlines() if l.strip()]
                 if lines:
-                    title_text = lines[:90].strip()
+                    title_text = lines[0][:90].strip()
         except Exception as e:
             return jsonify({"success": False, "message": f"Lỗi đọc file PDF: {e}"}), 500
 
