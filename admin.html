@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Cổng Quản Trị Giáo Viên | Trợ Lý AI Học Đường</title>
+  
+  <!-- Google Fonts: Plus Jakarta Sans -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+  <style>
+    :root {
+      --bg-dark: #0b0914;
+      --card-bg: rgba(22, 18, 38, 0.8);
+      --card-border: rgba(255, 255, 255, 0.12);
+      --accent-grad: linear-gradient(135deg, #ff416c 0%, #8a2387 50%, #e94057 100%);
+      --upload-grad: linear-gradient(135deg, #ff4b72 0%, #8f2fff 100%);
+      --text-main: #ffffff;
+      --text-sub: #a19fb5;
+      --success-green: #00e676;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Plus Jakarta Sans', sans-serif; }
+
+    body {
+      background-color: var(--bg-dark);
+      background-image: 
+        radial-gradient(circle at 15% 20%, rgba(233, 64, 87, 0.22) 0%, transparent 40%),
+        radial-gradient(circle at 85% 30%, rgba(138, 35, 135, 0.25) 0%, transparent 45%),
+        radial-gradient(circle at 80% 80%, rgba(0, 201, 167, 0.18) 0%, transparent 40%),
+        radial-gradient(circle at 10% 75%, rgba(255, 65, 108, 0.18) 0%, transparent 40%);
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding: 20px;
+      color: var(--text-main);
+    }
+
+    /* CARD CHÍNH */
+    .admin-card {
+      background: var(--card-bg);
+      backdrop-filter: blur(24px);
+      -webkit-backdrop-filter: blur(24px);
+      border: 1px solid var(--card-border);
+      border-radius: 32px;
+      box-shadow: 0 16px 50px rgba(0, 0, 0, 0.55), inset 0 1px 1px rgba(255, 255, 255, 0.2);
+      width: 100%;
+      max-width: 620px;
+      overflow: hidden;
+      animation: zoomIn 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    @keyframes zoomIn {
+      from { opacity: 0; transform: scale(0.95); }
+      to { opacity: 1; transform: scale(1); }
+    }
+
+    /* HEADER */
+    .admin-header {
+      background: linear-gradient(90deg, rgba(138, 35, 135, 0.55) 0%, rgba(233, 64, 87, 0.45) 100%);
+      padding: 24px 28px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .admin-brand {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .shield-badge {
+      width: 48px;
+      height: 48px;
+      border-radius: 14px;
+      background: linear-gradient(135deg, #ff416c, #8a2387);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      font-size: 1.4rem;
+      box-shadow: 0 6px 20px rgba(255, 65, 108, 0.4);
+    }
+
+    .admin-brand h1 {
+      font-size: 1.25rem;
+      font-weight: 800;
+      background: linear-gradient(90deg, #ffffff, #ffd1dc);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .admin-brand p {
+      font-size: 0.82rem;
+      color: var(--text-sub);
+      margin-top: 2px;
+    }
+
+    .back-btn {
+      color: #00d2ff;
+      text-decoration: none;
+      font-size: 0.85rem;
+      font-weight: 700;
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      padding: 8px 16px;
+      border-radius: 20px;
+      transition: all 0.2s;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .back-btn:hover {
+      background: rgba(255, 255, 255, 0.2);
+      transform: translateX(-2px);
+    }
+
+    /* BODY */
+    .admin-body {
+      padding: 28px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    /* FORM NHẬP MẬT MÃ */
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .form-group label {
+      font-size: 0.86rem;
+      font-weight: 600;
+      color: var(--text-sub);
+      display: flex;
+      justify-content: space-between;
+    }
+
+    .pass-input-wrapper {
+      position: relative;
+      display: flex;
+      align-items: center;
+    }
+
+    .pass-input {
+      width: 100%;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 16px;
+      padding: 12px 18px 12px 42px;
+      color: #fff;
+      font-size: 0.95rem;
+      outline: none;
+      transition: all 0.2s;
+    }
+    .pass-input:focus {
+      border-color: rgba(255, 75, 114, 0.7);
+      box-shadow: 0 0 18px rgba(255, 75, 114, 0.25);
+      background: rgba(255, 255, 255, 0.08);
+    }
+    .pass-icon {
+      position: absolute;
+      left: 14px;
+      font-size: 1.1rem;
+      color: #ff6b8b;
+    }
+
+    /* KHUNG KÉO THẢ TỆP */
+    .drop-zone {
+      border: 2px dashed rgba(255, 75, 114, 0.4);
+      background: rgba(255, 255, 255, 0.03);
+      border-radius: 20px;
+      padding: 32px 20px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.25s;
+      position: relative;
+    }
+    .drop-zone:hover, .drop-zone.dragover {
+      border-color: #ff4b72;
+      background: rgba(255, 75, 114, 0.08);
+      box-shadow: 0 0 25px rgba(255, 75, 114, 0.2);
+    }
+
+    .drop-icon {
+      font-size: 2.8rem;
+      margin-bottom: 12px;
+      display: inline-block;
+      animation: float 2.5s ease-in-out infinite;
+    }
+    @keyframes float {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-6px); }
+    }
+
+    .drop-title {
+      font-size: 1.05rem;
+      font-weight: 700;
+      color: #ffffff;
+      margin-bottom: 6px;
+    }
+
+    .drop-hint {
+      font-size: 0.82rem;
+      color: var(--text-sub);
+    }
+
+    .file-input-hidden {
+      display: none;
+    }
+
+    /* THANH THÔNG TIN TỆP ĐÃ CHỌN */
+    .selected-file-box {
+      display: none;
+      align-items: center;
+      justify-content: space-between;
+      background: rgba(0, 230, 118, 0.08);
+      border: 1px solid rgba(0, 230, 118, 0.3);
+      border-radius: 14px;
+      padding: 12px 18px;
+    }
+
+    .file-details {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      overflow: hidden;
+    }
+
+    .file-type-icon {
+      font-size: 1.6rem;
+    }
+
+    .file-meta {
+      overflow: hidden;
+    }
+    .file-name {
+      font-size: 0.9rem;
+      font-weight: 700;
+      color: #ffffff;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 320px;
+    }
+    .file-size {
+      font-size: 0.78rem;
+      color: var(--success-green);
+    }
+
+    .clear-file-btn {
+      background: none;
+      border: none;
+      color: #ff6b6b;
+      cursor: pointer;
+      font-size: 1.1rem;
+      padding: 4px;
+    }
+
+    /* NÚT UPLOAD HOÀNH TRÁNG */
+    .btn-submit {
+      background: var(--upload-grad);
+      color: white;
+      border: none;
+      padding: 14px 28px;
+      border-radius: 20px;
+      cursor: pointer;
+      font-weight: 700;
+      font-size: 1rem;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 10px;
+      box-shadow: 0 6px 25px rgba(255, 75, 114, 0.45);
+      transition: all 0.25s;
+      margin-top: 6px;
+    }
+    .btn-submit:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 10px 30px rgba(255, 75, 114, 0.65);
+    }
+    .btn-submit:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    /* KHUNG THÔNG BÁO KẾT QUẢ */
+    .status-alert {
+      display: none;
+      padding: 14px 18px;
+      border-radius: 16px;
+      font-size: 0.88rem;
+      line-height: 1.5;
+      animation: fadeIn 0.3s ease;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(-4px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .status-alert.success {
+      background: rgba(0, 230, 118, 0.12);
+      border: 1px solid rgba(0, 230, 118, 0.4);
+      color: #b9f6ca;
+    }
+    .status-alert.error {
+      background: rgba(255, 82, 82, 0.12);
+      border: 1px solid rgba(255, 82, 82, 0.4);
+      color: #ff8a80;
+    }
+
+    /* RESPONSIVE */
+    @media (max-width: 600px) {
+      body { padding: 10px; }
+      .admin-card { border-radius: 24px; }
+      .admin-header { padding: 18px 20px; }
+      .admin-body { padding: 20px; }
+      .file-name { max-width: 200px; }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="admin-card">
+    
+    <!-- HEADER -->
+    <div class="admin-header">
+      <div class="admin-brand">
+        <div class="shield-badge">🛡️</div>
+        <div>
+          <h1>Cổng Giáo Viên</h1>
+          <p>Nạp văn bản chính thức vào hệ thống AI</p>
+        </div>
+      </div>
+      <a href="/" class="back-btn">👈 Về trang Chat</a>
+    </div>
+
+    <!-- BODY -->
+    <div class="admin-body">
+
+      <!-- 1. Ô NHẬP MẬT MÃ -->
+      <div class="form-group">
+        <label>
+          <span>Mật mã quản trị giáo viên:</span>
+          <span style="color: #ff85a1; font-weight: normal; font-size: 0.8rem;">(Bắt buộc để xác thực)</span>
+        </label>
+        <div class="pass-input-wrapper">
+          <span class="pass-icon">🔑</span>
+          <input 
+            type="password" 
+            id="adminKeyInput" 
+            class="pass-input" 
+            placeholder="Nhập mật mã quản trị..." 
+          />
+        </div>
+      </div>
+
+      <!-- 2. KHU VỰC KÉO THẢ TỆP -->
+      <div class="drop-zone" id="dropZone" onclick="triggerFileSelect()">
+        <span class="drop-icon">📤</span>
+        <div class="drop-title">Kéo & thả văn bản vào đây</div>
+        <div class="drop-hint">Hỗ trợ định dạng <b>.DOCX (Word)</b> hoặc <b>.PDF (Công văn)</b></div>
+        <input 
+          type="file" 
+          id="filePicker" 
+          class="file-input-hidden" 
+          accept=".docx, .pdf" 
+          onchange="handleFileSelected(event)"
+        />
+      </div>
+
+      <!-- 3. HIỂN THỊ TỆP ĐÃ CHỌN -->
+      <div class="selected-file-box" id="fileInfoBox">
+        <div class="file-details">
+          <span class="file-type-icon" id="fileIcon">📄</span>
+          <div class="file-meta">
+            <div class="file-name" id="fileNameText">ten_tep.docx</div>
+            <div class="file-size" id="fileSizeText">0 KB</div>
+          </div>
+        </div>
+        <button class="clear-file-btn" onclick="clearSelectedFile()" title="Hủy chọn tệp">✕</button>
+      </div>
+
+      <!-- 4. KHUNG BÁO KẾT QUẢ -->
+      <div class="status-alert" id="statusBox"></div>
+
+      <!-- 5. NÚT NẠP TÀI LIỆU -->
+      <button class="btn-submit" id="btnUpload" onclick="uploadDocument()">
+        <span>🚀 Nạp Tài Liệu Lên Hệ Thống</span>
+      </button>
+
+    </div>
+  </div>
+
+  <script>
+    let currentSelectedFile = null;
+
+    // Tự động nạp mật khẩu đã nhập từ trang index (nếu có)
+    window.onload = function() {
+      const savedKey = sessionStorage.getItem("admin_key");
+      if (savedKey) {
+        document.getElementById("adminKeyInput").value = savedKey;
+      }
+    };
+
+    function triggerFileSelect() {
+      document.getElementById("filePicker").click();
+    }
+
+    function handleFileSelected(event) {
+      const files = event.target.files;
+      if (files.length > 0) {
+        processFile(files[0]);
+      }
+    }
+
+    function processFile(file) {
+      const ext = file.name.split('.').pop().toLowerCase();
+      if (ext !== 'docx' && ext !== 'pdf') {
+        showStatus("Chỉ chấp nhận tệp định dạng .DOCX hoặc .PDF!", "error");
+        return;
+      }
+
+      currentSelectedFile = file;
+      document.getElementById("fileNameText").innerText = file.name;
+      document.getElementById("fileSizeText").innerText = `${(file.size / 1024).toFixed(1)} KB • Sẵn sàng nạp`;
+      document.getElementById("fileIcon").innerText = ext === 'pdf' ? "📕" : "📘";
+
+      document.getElementById("fileInfoBox").style.display = "flex";
+      document.getElementById("dropZone").style.display = "none";
+      hideStatus();
+    }
+
+    function clearSelectedFile() {
+      currentSelectedFile = null;
+      document.getElementById("filePicker").value = "";
+      document.getElementById("fileInfoBox").style.display = "none";
+      document.getElementById("dropZone").style.display = "block";
+      hideStatus();
+    }
+
+    // Xử lý kéo thả (Drag and drop)
+    const dropZone = document.getElementById("dropZone");
+    ['dragenter', 'dragover'].forEach(eventName => {
+      dropZone.addEventListener(eventName, (e) => {
+        e.preventDefault();
+        dropZone.classList.add('dragover');
+      }, false);
+    });
+    ['dragleave', 'drop'].forEach(eventName => {
+      dropZone.addEventListener(eventName, (e) => {
+        e.preventDefault();
+        dropZone.classList.remove('dragover');
+      }, false);
+    });
+    dropZone.addEventListener('drop', (e) => {
+      const dt = e.dataTransfer;
+      const files = dt.files;
+      if (files.length > 0) processFile(files[0]);
+    });
+
+    // HÀM TẢI LÊN MÁY CHỦ
+    async function uploadDocument() {
+      const keyInput = document.getElementById("adminKeyInput").value.trim();
+      const btn = document.getElementById("btnUpload");
+
+      if (!keyInput) {
+        showStatus("Vui lòng nhập mật mã quản trị giáo viên!", "error");
+        return;
+      }
+
+      if (!currentSelectedFile) {
+        showStatus("Vui lòng chọn hoặc kéo thả 1 tệp văn bản!", "error");
+        return;
+      }
+
+      // Khóa nút trong lúc xử lý
+      btn.disabled = true;
+      btn.innerHTML = `<span>⏳ Đang đọc và trích xuất dữ liệu...</span>`;
+      hideStatus();
+
+      const formData = new FormData();
+      formData.append("file", currentSelectedFile);
+      formData.append("admin_key", keyInput);
+
+      try {
+        const res = await fetch("/upload", {
+          method: "POST",
+          headers: {
+            "X-Admin-Key": keyInput
+          },
+          body: formData
+        });
+
+        const data = await res.json();
+
+        if (res.status === 403) {
+          showStatus("❌ Mật mã quản trị không chính xác hoặc bạn không có quyền!", "error");
+        } else if (data.success) {
+          // Lưu lại mật khẩu hợp lệ cho các lần sau
+          sessionStorage.setItem("admin_key", keyInput);
+          
+          let successMsg = `<b>✅ Thành công:</b> ${data.message}<br>`;
+          if (data.title) successMsg += `📌 <b>Tiêu đề:</b> ${data.title}<br>`;
+          if (data.time_info) successMsg += `📅 <b>Thời hạn:</b> ${data.time_info}`;
+
+          showStatus(successMsg, "success");
+          clearSelectedFile();
+        } else {
+          showStatus(`⚠️ ${data.message || 'Có lỗi xảy ra trong quá trình nạp tệp.'}`, "error");
+        }
+      } catch (err) {
+        console.error(err);
+        showStatus("❌ Lỗi kết nối đến máy chủ! Vui lòng kiểm tra lại Terminal.", "error");
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = `<span>🚀 Nạp Tài Liệu Lên Hệ Thống</span>`;
+      }
+    }
+
+    function showStatus(html, type) {
+      const box = document.getElementById("statusBox");
+      box.className = `status-alert ${type}`;
+      box.innerHTML = html;
+      box.style.display = "block";
+    }
+
+    function hideStatus() {
+      document.getElementById("statusBox").style.display = "none";
+    }
+  </script>
+</body>
+</html>

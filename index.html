@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Trợ Lý AI Học Đường</title>
+  
+  <!-- Mammoth.js đọc file Word (.docx) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+  <style>
+    :root {
+      --bg-dark: #0b0914;
+      --card-bg: rgba(22, 18, 38, 0.75);
+      --card-border: rgba(255, 255, 255, 0.12);
+      --send-grad: linear-gradient(135deg, #ff4b72 0%, #8f2fff 100%);
+      --text-main: #ffffff;
+      --text-sub: #a19fb5;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Plus Jakarta Sans', sans-serif; }
+    
+    body {
+      background-color: var(--bg-dark);
+      background-image: 
+        radial-gradient(circle at 15% 20%, rgba(233, 64, 87, 0.22) 0%, transparent 40%),
+        radial-gradient(circle at 85% 30%, rgba(138, 35, 135, 0.25) 0%, transparent 45%),
+        radial-gradient(circle at 80% 80%, rgba(0, 201, 167, 0.18) 0%, transparent 40%),
+        radial-gradient(circle at 10% 75%, rgba(255, 65, 108, 0.18) 0%, transparent 40%);
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      overflow: hidden;
+      color: var(--text-main);
+    }
+
+    .app-container {
+      width: 100%;
+      max-width: 1350px;
+      height: 92vh;
+      display: flex;
+      padding: 16px;
+      gap: 20px;
+      position: relative;
+      transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    /* 1. KHUNG CHAT NEON */
+    .chat-container {
+      background: var(--card-bg);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid var(--card-border);
+      border-radius: 28px;
+      box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5), inset 0 1px 1px rgba(255, 255, 255, 0.15);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      width: 100%;
+      max-width: 820px;
+      margin: 0 auto;
+      transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+      z-index: 5;
+    }
+
+    .app-container.show-doc .chat-container {
+      max-width: 480px;
+      margin: 0;
+    }
+
+    .chat-header {
+      background: linear-gradient(90deg, rgba(138, 35, 135, 0.5) 0%, rgba(233, 64, 87, 0.4) 100%);
+      padding: 18px 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .brand { display: flex; align-items: center; gap: 12px; }
+    .bot-avatar {
+      width: 42px; height: 42px; border-radius: 12px;
+      background: linear-gradient(135deg, #00c6ff, #0072ff);
+      display: flex; justify-content: center; align-items: center;
+      box-shadow: 0 4px 15px rgba(0, 114, 255, 0.4);
+      font-size: 1.3rem;
+    }
+
+    .brand h2 {
+      font-size: 1.18rem; font-weight: 700;
+      background: linear-gradient(90deg, #ffffff, #ffd1dc);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .admin-badge {
+      display: inline-flex; align-items: center; gap: 6px;
+      background: rgba(255, 255, 255, 0.12);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      padding: 8px 16px; border-radius: 20px;
+      color: #fff; font-size: 0.85rem; font-weight: 600;
+      cursor: pointer; backdrop-filter: blur(8px);
+      transition: all 0.2s;
+    }
+    .admin-badge:hover { background: rgba(255, 255, 255, 0.25); transform: translateY(-1px); }
+
+    .chat-box {
+      flex: 1; padding: 24px; overflow-y: auto;
+      display: flex; flex-direction: column; gap: 18px;
+    }
+
+    .msg-wrapper { display: flex; gap: 12px; align-items: flex-start; max-width: 88%; }
+    .msg-wrapper.bot { align-self: flex-start; }
+    .msg-wrapper.user { align-self: flex-end; flex-direction: row-reverse; }
+
+    .msg-avatar {
+      width: 32px; height: 32px; border-radius: 10px;
+      background: linear-gradient(135deg, #ff416c, #8a2387);
+      display: flex; justify-content: center; align-items: center;
+      font-size: 1rem; flex-shrink: 0;
+      box-shadow: 0 2px 10px rgba(255, 65, 108, 0.3);
+    }
+
+    .message {
+      padding: 14px 18px; border-radius: 18px;
+      font-size: 0.94rem; line-height: 1.55;
+      word-break: break-word; white-space: pre-wrap;
+    }
+
+    .bot-msg {
+      background: rgba(35, 30, 58, 0.65);
+      border: 1px solid rgba(255, 75, 114, 0.35);
+      color: #f1f0f8; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+      border-top-left-radius: 4px;
+    }
+
+    .user-msg {
+      background: linear-gradient(135deg, rgba(143, 47, 255, 0.8), rgba(255, 75, 114, 0.8));
+      color: #ffffff; border-top-right-radius: 4px;
+      box-shadow: 0 4px 15px rgba(255, 75, 114, 0.25);
+    }
+
+    .source-box {
+      margin-top: 10px; padding-top: 10px;
+      border-top: 1px dashed rgba(255, 255, 255, 0.15);
+      font-size: 0.82rem; color: var(--text-sub);
+    }
+    .source-tag { font-weight: 700; color: #ff85a1; }
+    
+    .preview-btn {
+      color: #00d2ff; font-weight: 600; text-decoration: underline;
+      cursor: pointer; background: none; border: none; padding: 0;
+      font-size: 0.82rem; margin-left: 6px;
+    }
+    .preview-btn:hover { color: #5ce1e6; }
+
+    .input-area {
+      padding: 16px 20px; background: rgba(18, 14, 30, 0.85);
+      border-top: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    .input-pill {
+      display: flex; align-items: center;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 30px; padding: 6px 8px 6px 18px;
+      transition: all 0.3s;
+    }
+    .input-pill:focus-within {
+      border-color: rgba(255, 75, 114, 0.6);
+      box-shadow: 0 0 20px rgba(255, 75, 114, 0.25);
+      background: rgba(255, 255, 255, 0.08);
+    }
+
+    .search-icon { color: var(--text-sub); font-size: 1.1rem; margin-right: 10px; }
+    input[type="text"] {
+      flex: 1; background: transparent; border: none; outline: none;
+      color: #ffffff; font-size: 0.95rem;
+    }
+    input[type="text"]::placeholder { color: #6b6882; }
+
+    .input-actions { display: flex; align-items: center; gap: 10px; }
+    .icon-btn {
+      background: none; border: none; color: #ff6b8b;
+      font-size: 1.15rem; cursor: pointer; padding: 6px;
+    }
+
+    .send-btn {
+      background: var(--send-grad); color: white; border: none;
+      padding: 10px 22px; border-radius: 24px; cursor: pointer;
+      font-weight: 700; font-size: 0.92rem;
+      box-shadow: 0 4px 15px rgba(255, 75, 114, 0.4);
+      transition: all 0.2s;
+    }
+    .send-btn:hover { transform: translateY(-1px); box-shadow: 0 6px 20px rgba(255, 75, 114, 0.6); }
+
+    /* 2. KHUNG XEM VĂN BẢN ĐỐI SOÁT */
+    .preview-container {
+      flex: 1; background: #141124; border-radius: 28px;
+      border: 1px solid var(--card-border);
+      box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+      display: none; flex-direction: column; overflow: hidden;
+      animation: fadeIn 0.35s ease-out;
+    }
+    .app-container.show-doc .preview-container { display: flex; }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: scale(0.97); }
+      to { opacity: 1; transform: scale(1); }
+    }
+
+    .preview-header {
+      background: rgba(30, 25, 48, 0.8); padding: 16px 22px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    .preview-title {
+      font-weight: 700; font-size: 0.95rem; color: #fff;
+      max-width: 65%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .preview-controls { display: flex; align-items: center; gap: 12px; }
+    .preview-controls a { color: #00d2ff; text-decoration: none; font-size: 0.85rem; font-weight: 600; }
+
+    .close-circle {
+      background: rgba(255, 255, 255, 0.1); border: none; color: #fff;
+      width: 30px; height: 30px; border-radius: 50%; cursor: pointer;
+      display: flex; justify-content: center; align-items: center;
+    }
+    .close-circle:hover { background: rgba(255, 255, 255, 0.25); }
+
+    .preview-body {
+      flex: 1; background: #ffffff; color: #222222;
+      overflow-y: auto; padding: 24px; font-size: 0.95rem; line-height: 1.7;
+    }
+    .word-content h1, .word-content h2 { color: #8a2387; margin: 12px 0 8px; }
+    .word-content p { margin-bottom: 12px; text-align: justify; }
+
+    /* RESPONSIVE SMARTPHONE (< 768px) */
+    @media (max-width: 768px) {
+      body { padding: 0; }
+      .app-container { padding: 0; height: 100vh; }
+      .chat-container { border-radius: 0; max-width: 100% !important; margin: 0 !important; }
+      .app-container.show-doc .preview-container {
+        position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+        width: 100vw; height: 100vh; border-radius: 0; z-index: 100;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="app-container" id="appContainer">
+    
+    <!-- KHUNG ĐỐI SOÁT VĂN BẢN (PDF / WORD) -->
+    <div class="preview-container" id="previewContainer">
+      <div class="preview-header">
+        <div class="preview-title" id="previewTitle">📄 Khung Đối Soát Văn Bản</div>
+        <div class="preview-controls">
+          <span id="previewDownload"></span>
+          <button class="close-circle" onclick="closeDocument()" title="Đóng văn bản">✕</button>
+        </div>
+      </div>
+      <div class="preview-body" id="previewBody"></div>
+    </div>
+
+    <!-- KHUNG CHAT NEON -->
+    <div class="chat-container">
+      <div class="chat-header">
+        <div class="brand">
+          <div class="bot-avatar">🤖</div>
+          <h2>Trợ Lý AI Học Đường</h2>
+        </div>
+        <!-- NÚT BẤM CỔNG GIÁO VIÊN BẢO MẬT -->
+        <button class="admin-badge" onclick="accessAdmin()"> Cổng Giáo Viên</button>
+      </div>
+
+      <div class="chat-box" id="chatBox">
+        <div class="msg-wrapper bot">
+          <div class="msg-avatar">✨</div>
+          <div class="message bot-msg">
+            Xin chào! Mình là Trợ lý AI học đường của trường. Mình sẵn sàng giải đáp các thắc mắc về kế hoạch, phong trào, an toàn giao thông và quy chế nhà trường cùng bạn!
+          </div>
+        </div>
+      </div>
+
+      <div class="input-area">
+        <div class="input-pill">
+          <span class="search-icon">🔍</span>
+          <input type="text" id="userInput" placeholder="Nhập câu hỏi của bạn tại đây..." onkeypress="handleKeyPress(event)" />
+          <div class="input-actions">
+            <button class="icon-btn" title="Ghi âm câu hỏi">🎤</button>
+            <button class="icon-btn" title="Mở danh mục">📑</button>
+            <button class="send-btn" onclick="sendMessage()">Gửi</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    function handleKeyPress(e) {
+      if (e.key === "Enter") sendMessage();
+    }
+
+    // 🔒 HÀM XÁC THỰC MẬT MÃ TRƯỚC KHI CHO VÀO CỔNG GIÁO VIÊN
+    async function accessAdmin() {
+      const pin = prompt("Vui lòng nhập mật mã quản trị dành cho Giáo viên:");
+      if (!pin) return;
+
+      try {
+        const res = await fetch("/api/verify-admin", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ password: pin.trim() })
+        });
+        const data = await res.json();
+        
+        if (data.success) {
+          // Lưu tạm mã vào bộ nhớ phiên để tự điền khi upload
+          sessionStorage.setItem("admin_key", pin.trim());
+          window.location.href = "/admin";
+        } else {
+          alert("❌ Mật mã không chính xác. Quyền truy cập bị từ chối!");
+        }
+      } catch (err) {
+        alert("Không thể kết nối với máy chủ!");
+      }
+    }
+
+    async function sendMessage() {
+      const input = document.getElementById("userInput");
+      const text = input.value.trim();
+      if (!text) return;
+
+      appendMessage(text, "user");
+      input.value = "";
+
+      try {
+        const response = await fetch("/ask", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ question: text })
+        });
+        const data = await response.json();
+        appendMessage(data.answer, "bot", data.source, data.file_url);
+      } catch (error) {
+        console.error(error);
+        appendMessage("Không thể kết nối với máy chủ.", "bot");
+      }
+    }
+
+    function appendMessage(text, sender, source = null, fileUrl = null) {
+      const chatBox = document.getElementById("chatBox");
+      const wrapper = document.createElement("div");
+      wrapper.className = `msg-wrapper ${sender}`;
+
+      const avatar = document.createElement("div");
+      avatar.className = "msg-avatar";
+      avatar.innerText = sender === "bot" ? "✨" : "👤";
+
+      const msgDiv = document.createElement("div");
+      msgDiv.className = `message ${sender}-msg`;
+      
+      let formattedText = text.replace(/\*\*(.*?)\*\*/g, '<b>$1</b>');
+      let html = `<div>${formattedText}</div>`;
+      
+      if (source) {
+        // Cắt gọn nếu tên nguồn quá dài
+        let shortSource = source.length > 70 ? source.substring(0, 70) + "..." : source;
+
+        html += `<div class="source-box">` +
+                `<span class="source-tag">📌 Nguồn:</span> <span title="${source}">${shortSource}</span>`;
+        
+        if (fileUrl) {
+          html += ` | <button class="preview-btn" onclick="openDocument('${fileUrl}', '${source}')">📄 Xem văn bản gốc</button>`;
+        }
+        html += `</div>`;
+      }
+      
+      msgDiv.innerHTML = html;
+      wrapper.appendChild(avatar);
+      wrapper.appendChild(msgDiv);
+      chatBox.appendChild(wrapper);
+      chatBox.scrollTop = chatBox.scrollHeight;
+    }
+
+    async function openDocument(fileUrl, sourceName) {
+      const appContainer = document.getElementById("appContainer");
+      const previewTitle = document.getElementById("previewTitle");
+      const previewBody = document.getElementById("previewBody");
+      const previewDownload = document.getElementById("previewDownload");
+
+      appContainer.classList.add("show-doc");
+      previewTitle.innerText = `📄 ${sourceName}`;
+      previewDownload.innerHTML = `<a href="${fileUrl}" target="_blank" download>⬇️ Tải file</a>`;
+
+      const isPdf = fileUrl.toLowerCase().endsWith(".pdf");
+
+      if (isPdf) {
+        previewBody.style.padding = "0";
+        previewBody.innerHTML = `
+          <iframe src="${fileUrl}" width="100%" height="100%" style="border: none; display: block;">
+            <p>Trình duyệt không hỗ trợ xem PDF. <a href="${fileUrl}" target="_blank">Tải về máy tại đây.</a></p>
+          </iframe>
+        `;
+      } else {
+        previewBody.style.padding = "24px";
+        previewBody.innerHTML = `<div style="text-align: center; padding: 40px; color: #888;">⏳ Đang trích xuất văn bản Word...</div>`;
+
+        try {
+          const res = await fetch(fileUrl);
+          const arrayBuffer = await res.arrayBuffer();
+
+          mammoth.convertToHtml({ arrayBuffer: arrayBuffer })
+            .then(function(result) {
+              previewBody.innerHTML = `<div class="word-content">${result.value}</div>`;
+            })
+            .catch(function(err) {
+              previewBody.innerHTML = `<div style="color: red; text-align: center; padding: 20px;">Lỗi định dạng Word.</div>`;
+            });
+        } catch (err) {
+          previewBody.innerHTML = `<div style="color: red; text-align: center; padding: 20px;">Không thể tải file từ máy chủ!</div>`;
+        }
+      }
+    }
+
+    function closeDocument() {
+      document.getElementById("appContainer").classList.remove("show-doc");
+    }
+  </script>
+</body>
+</html>
