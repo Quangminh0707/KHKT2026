@@ -1,320 +1,177 @@
-from flask import Flask, request, jsonify, send_from_directory
-from flask_cors import CORS
-import json
-import re
 import os
-from datetime import datetime
-from dotenv import load_dotenv
+import json
+import base64
+import re
+from flask import Flask, request, jsonify, render_template, send_from_directory
+from flask_cors import CORS
 import google.generativeai as genai
 from docx import Document
 from pypdf import PdfReader
+from dotenv import load_dotenv
+import requests
 
-# 1. Cấu hình biến môi trường & Gemini API
+# 1. NẠP CẤU HÌNH BIẾN MÔI TRƯỜNG (.env)
 load_dotenv()
-API_KEY = os.getenv("GEMINI_API_KEY")
-
-model = None
-if API_KEY:
-    try:
-        genai.configure(api_key=API_KEY)
-        model = genai.GenerativeModel("gemini-3.5-flash-lite")
-    except Exception as e:
-        print(f"Lỗi khởi tạo Gemini API: {e}")
-        model = None
-
-app = Flask(__name__)
-CORS(app, resources={r"/*": {"origins": "*"}})
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DATA_FILE = os.path.join(BASE_DIR, 'data.json')
 UPLOAD_FOLDER = os.path.join(BASE_DIR, 'tailieu')
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-DATA_FILE = os.path.join(BASE_DIR, "data.json")
+# Khởi tạo Flask App
+app = Flask(__name__, template_folder=BASE_DIR, static_folder=BASE_DIR)
+CORS(app)
 
-# 🔒 MẬT MÃ QUẢN TRỊ DÀNH CHO GIÁO VIÊN
+# 2. CẤU HÌNH GEMINI & MẬT MÃ QUẢN TRỊ
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+if GEMINI_API_KEY:
+    genai.configure(api_key=GEMINI_API_KEY)
+else:
+    print("⚠️ CẢNH BÁO: Chưa tìm thấy GEMINI_API_KEY trong biến môi trường!")
+
+# Mật mã quản trị giáo viên (mặc định: thptabc@2026)
 ADMIN_SECRET_KEY = os.getenv("ADMIN_KEY", "thptabc@2026")
 
-def load_knowledge():
-    """Luôn đọc lại dữ liệu mới nhất từ data.json"""
-    if os.path.exists(DATA_FILE):
-        try:
-            with open(DATA_FILE, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except Exception as e:
-            print(f"Lỗi đọc data.json: {e}")
-            return []
-    return []
+# Cấu hình tự động đẩy dữ liệu lên GitHub (Giải pháp 2)
+GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
+GITHUB_REPO = os.getenv("GITHUB_REPO")      # Dạng: username/repo-name
+GITHUB_BRANCH = os.getenv("GITHUB_BRANCH", "main")
 
-STOP_WORDS = {
-    "là", "gì", "như", "thế", "nào", "sao", "làm", "được", "không", "có", "và", 
-    "của", "cho", "các", "những", "trong", "khi", "ở", "về", "đến", "tại", 
-    "học", "sinh", "trường", "thpt", "em", "bạn", "thầy", "cô", "nhà"
-}
+# ==========================================================
+# CÁC HÀM TIỆN ÍCH HỖ TRỢ (UTILITIES)
+# ==========================================================
 
-def clean_words(text):
-    """Tách từ khóa quan trọng từ câu hỏi"""
-    words = re.findall(r'\w+', str(text).lower())
-    return [w for w in words if w not in STOP_WORDS and len(w) > 1]
+def load_data():
+    """Đọc dữ liệu văn bản từ file data.json an toàn"""
+    if not os.path.exists(DATA_FILE):
+        return []
+    try:
+        with open(DATA_FILE, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+            return data if isinstance(data, list) else []
+    except Exception as e:
+        print(f"Lỗi khi đọc {DATA_FILE}: {e}")
+        return []
 
-def safe_str(val):
-    """Ép kiểu an toàn tránh lỗi nối chuỗi TypeError"""
-    if val is None:
-        return ""
-    if isinstance(val, list):
-        return " ".join([str(item) for item in val if item is not None])
-    return str(val).strip()
+def save_data(data):
+    """Ghi danh sách văn bản vào data.json"""
+    try:
+        with open(DATA_FILE, 'w', encoding='utf-8') as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+        return True
+    except Exception as e:
+        print(f"Lỗi khi ghi {DATA_FILE}: {e}")
+        return False
 
-def parse_date_to_object(date_str):
-    """Chuyển chuỗi ngày thành đối tượng date để so sánh với thời gian thực"""
-    if not date_str:
-        return None
-    
-    match_end = re.search(r'đến(?:\s+hết)?\s+ngày\s+(\d{1,2})[/-](\d{1,2})[/-](\d{4})', date_str, re.IGNORECASE)
-    if match_end:
-        d, m, y = map(int, match_end.groups())
-        try:
-            return datetime(y, m, d).date()
-        except ValueError:
-            pass
+def push_to_github(file_path_in_repo, content_bytes, commit_message):
+    """Tự động đẩy file lên GitHub qua GitHub REST API (Giải pháp 2)"""
+    if not GITHUB_TOKEN or not GITHUB_REPO:
+        # Nếu chưa cấu hình GitHub Token thì chỉ lưu máy chủ cục bộ, không báo lỗi
+        return False
 
-    match_slash = re.search(r'(\d{1,2})/(\d{1,2})/(\d{4})', date_str)
-    if match_slash:
-        d, m, y = map(int, match_slash.groups())
-        try:
-            return datetime(y, m, d).date()
-        except ValueError:
-            pass
+    url = f"https://api.github.com/repos/{GITHUB_REPO}/contents/{file_path_in_repo}"
+    headers = {
+        "Authorization": f"Bearer {GITHUB_TOKEN}",
+        "Accept": "application/vnd.github.v3+json"
+    }
 
-    match_vn = re.search(r'ngày\s+(\d{1,2})\s+tháng\s+(\d{1,2})(?:\s+năm\s+(\d{4}))?', date_str, re.IGNORECASE)
-    if match_vn:
-        d = int(match_vn.group(1))
-        m = int(match_vn.group(2))
-        y = int(match_vn.group(3)) if match_vn.group(3) else datetime.now().year
-        try:
-            return datetime(y, m, d).date()
-        except ValueError:
-            pass
+    try:
+        # Kiểm tra file đã có trên GitHub chưa để lấy SHA nếu là cập nhật
+        sha = None
+        res_check = requests.get(url, headers=headers, timeout=10)
+        if res_check.status_code == 200:
+            sha = res_check.json().get("sha")
 
-    return None
+        payload = {
+            "message": commit_message,
+            "content": base64.b64encode(content_bytes).decode("utf-8"),
+            "branch": GITHUB_BRANCH
+        }
+        if sha:
+            payload["sha"] = sha
 
-def extract_dates(text):
-    """Quét văn bản để tìm khoảng thời gian tổ chức hoặc hạn chót"""
-    date_patterns = [
-        r'(từ ngày\s+\d{1,2}[/-]\d{1,2}(?:[/-]\d{2,4})?\s+đến(?:\s+hết)?\s+ngày\s+\d{1,2}[/-]\d{1,2}[/-]\d{2,4})',
-        r'(ngày\s+\d{1,2}\s+tháng\s+\d{1,2}(?:\s+năm\s+\d{4})?)',
-        r'(\d{1,2}/\d{1,2}/\d{4})',
-        r'(học kỳ\s+[iI12]{1,2}(?:\s+năm học\s+\d{4}[–-]\d{4})?)',
-        r'(năm học\s+\d{4}[–-]\d{4})'
-    ]
-    
-    for pattern in date_patterns:
-        match = re.search(pattern, text, re.IGNORECASE)
-        if match:
-            return match.group(0).strip()
-            
-    return "Thực hiện theo kế hoạch/công văn của nhà trường"
-
-def check_expiration(date_text):
-    """Kiểm tra thời hạn sự kiện so với ngày hiện tại của máy tính"""
-    target_date = parse_date_to_object(date_text)
-    today = datetime.now().date()
-    
-    if target_date:
-        if today > target_date:
-            return True, f"ĐÃ KẾT THÚC / QUÁ HẠN (Thời gian diễn ra/Hạn chót: {target_date.strftime('%d/%m/%Y')})"
-        elif today == target_date:
-            return False, f"ĐANG DIỄN RA HÔM NAY ({target_date.strftime('%d/%m/%Y')})"
+        res_put = requests.put(url, headers=headers, json=payload, timeout=15)
+        if res_put.status_code in [200, 201]:
+            print(f"✅ Đã đồng bộ lên GitHub: {file_path_in_repo}")
+            return True
         else:
-            return False, f"SẮP DIỄN RA (Thời hạn đến ngày {target_date.strftime('%d/%m/%Y')})"
-    
-    return False, date_text
+            print(f"⚠️ Không thể đồng bộ GitHub ({res_put.status_code}): {res_put.text}")
+            return False
+    except Exception as e:
+        print(f"⚠️ Lỗi kết nối GitHub API: {e}")
+        return False
 
-# ----------------------------------------------------
-# 1. Định tuyến giao diện & Xác thực cổng giáo viên
-# ----------------------------------------------------
-@app.route('/', methods=['GET'])
-def home_page():
+# ==========================================================
+# CÁC ROUTE PHỤC VỤ GIAO DIỆN & TÀI LIỆU
+# ==========================================================
+
+@app.route('/')
+def home():
+    """Trang giao diện trò chuyện chính của học sinh"""
     return send_from_directory(BASE_DIR, 'index.html')
 
-@app.route('/admin', methods=['GET'])
+@app.route('/admin')
 def admin_page():
+    """Trang giao diện Cổng Giáo Viên"""
     return send_from_directory(BASE_DIR, 'admin.html')
-
-# Tuyến đường kiểm tra mật khẩu nhanh cho nút bấm trên trang index
-@app.route('/api/verify-admin', methods=['POST'])
-def verify_admin():
-    data = request.json or {}
-    password = data.get("password", "")
-    if password == ADMIN_SECRET_KEY:
-        return jsonify({"success": True})
-    return jsonify({"success": False, "message": "Mật mã quản trị không chính xác!"}), 403
 
 @app.route('/tailieu/<path:filename>', methods=['GET'])
 def serve_file(filename):
-    # Xử lý chuẩn hóa tên file để tránh lỗi dấu gạch chéo ngược trên Windows
+    """Phục vụ file gốc Word/PDF cho khung đối soát văn bản"""
+    # Chuẩn hóa tên file, tránh dấu gạch chéo ngược Windows
     safe_filename = filename.replace("\\", "/").split("/")[-1]
     return send_from_directory(UPLOAD_FOLDER, safe_filename, as_attachment=False)
 
-# ----------------------------------------------------
-# 2. Tuyến đường Hỏi đáp (/ask)
-# ----------------------------------------------------
-@app.route("/ask", methods=["POST"])
-def ask():
-    current_knowledge = load_knowledge()
-    data = request.json or {}
-    user_question = data.get("question", "").strip()
-    user_question_lower = user_question.lower()
+@app.route('/api/verify-admin', methods=['POST'])
+def verify_admin():
+    """Xác thực mật khẩu khi bấm vào nút Cổng Giáo Viên trên web"""
+    req = request.get_json(silent=True) or {}
+    password = req.get("password", "").strip()
+    if password == ADMIN_SECRET_KEY:
+        return jsonify({"success": True})
+    return jsonify({"success": False, "message": "Mật khẩu không chính xác!"}), 403
 
-    if not user_question:
-        return jsonify({"answer": "Vui lòng nhập câu hỏi của bạn.", "source": None, "file_url": None, "time_info": None})
+# ==========================================================
+# CỔNG GIÁO VIÊN: TẢI VĂN BẢN & TRÍCH XUẤT (UPLOAD)
+# ==========================================================
 
-    keywords_rieng_tu = ["điểm số", "điểm thi", "kỷ luật cá nhân", "học bạ", "sức khỏe", "tiền riêng"]
-    if any(kw in user_question_lower for kw in keywords_rieng_tu):
-        return jsonify({
-            "answer": "Hệ thống chỉ hỗ trợ tra cứu thông tin chung của nhà trường và không xử lý thông tin cá nhân (như điểm số, kỷ luật). Bạn vui lòng liên hệ giáo viên chủ nhiệm hoặc ban giám hiệu nhé.",
-            "source": "Quy chế bảo vệ dữ liệu học đường",
-            "file_url": None,
-            "time_info": None
-        })
-
-    query_keywords = clean_words(user_question)
-    best_doc = None
-    max_score = 0
-
-    DAC_THU = ["ma túy", "hue-s", "trắc nghiệm", "bạo lực", "giao thông", "stem", "phù đổng", "tri ân", "hướng nghiệp", "đọc sách", "môi trường"]
-
-    for doc in current_knowledge:
-        ten_tl = safe_str(doc.get("ten_tai_lieu", ""))
-        noi_dung = safe_str(doc.get("noi_dung", ""))
-        thoi_gian = safe_str(doc.get("thoi_gian_to_chuc", ""))
-
-        doc_text = f"{ten_tl} {noi_dung} {thoi_gian}".lower()
-        score = sum(1 for kw in query_keywords if kw in doc_text)
-        
-        for dt in DAC_THU:
-            if dt in user_question_lower and dt in doc_text:
-                score += 5
-
-        if any(kw in ten_tl.lower() for kw in query_keywords):
-            score += 3
-
-        if any(time_kw in user_question_lower for time_kw in ["khi nào", "thời gian", "ngày", "bao giờ", "hết hạn", "kết thúc"]):
-            if any(kw in thoi_gian.lower() for kw in query_keywords):
-                score += 2
-
-        if doc.get("id", 0) > 20 and score > 0:
-            score += 1
-
-        if score > max_score:
-            max_score = score
-            best_doc = doc
-
-    if best_doc and max_score >= 1:
-        ten_tl_best = safe_str(best_doc.get("ten_tai_lieu", ""))
-        noi_dung_best = safe_str(best_doc.get("noi_dung", ""))
-        raw_time = safe_str(best_doc.get("thoi_gian_to_chuc", ""))
-        
-        is_expired, status_time = check_expiration(raw_time)
-
-        expired_note = ""
-        if is_expired:
-            expired_note = f"\n⚠️ [LƯU Ý: Sự kiện/Kế hoạch này {status_time}. Hãy nêu rõ cho bạn học sinh biết thời gian đã kết thúc, sau đó tóm tắt nội dung kế hoạch đã lưu.]"
-
-        if model:
-            prompt = f"""
-Bạn là Trợ lý AI học đường thân thiện của Trường THPT ABC.
-Khi trả lời, bạn hãy xưng là "mình" và gọi người hỏi là "bạn" (tuyệt đối không xưng "em", "tôi", "thầy/cô").
-
-Dưới đây là tài liệu chính thức từ nhà trường:
----
-Tài liệu: {ten_tl_best}
-Thời gian/Trạng thái: {status_time} {expired_note}
-Nội dung: {noi_dung_best}
----
-
-Câu hỏi của học sinh: {user_question}
-
-YÊU CẦU:
-1. Trả lời rõ ràng, gần gũi, đúng trọng tâm, dựa hoàn toàn vào nội dung văn bản trên.
-2. Nếu văn bản ĐÃ HẾT HẠN / ĐÃ KẾT THÚC: Hãy thông báo rõ cho bạn học sinh biết là sự kiện/cuộc thi này đã kết thúc vào ngày đó trước khi tóm tắt nội dung.
-3. Không tự suy diễn hay bịa đặt thêm quy định ngoài tài liệu.
-"""
-            try:
-                ai_answer = model.generate_content(prompt).text.strip()
-            except Exception as e:
-                print(f"Lỗi gọi Gemini: {e}")
-                if is_expired:
-                    ai_answer = f"⚠️ Chào bạn, sự kiện này {status_time}.\n\nNội dung chi tiết của kế hoạch:\n{noi_dung_best}"
-                else:
-                    ai_answer = f"Chào bạn! Dưới đây là thông tin chi tiết:\n{noi_dung_best}\n\n📅 Thời gian: {status_time}"
-        else:
-            if is_expired:
-                ai_answer = f"⚠️ Chào bạn, sự kiện này {status_time}.\n\nNội dung chi tiết của kế hoạch:\n{noi_dung_best}"
-            else:
-                ai_answer = f"Chào bạn! Dưới đây là thông tin chi tiết:\n{noi_dung_best}\n\n📅 Thời gian: {status_time}"
-
-        file_path = safe_str(best_doc.get("duong_dan_file", ""))
-        if file_path:
-            clean_path = file_path.replace("\\", "/").lstrip("/")
-            full_file_url = f"/{clean_path}"
-        else:
-             full_file_url = None 
-
-        return jsonify({
-            "answer": ai_answer,
-            "source": ten_tl_best,
-            "file_url": full_file_url,
-            "time_info": status_time,
-            "is_expired": is_expired
-        })
-    else:
-        return jsonify({
-            "answer": "Hiện tại mình chưa tìm thấy thông tin phù hợp trong các văn bản đã ban hành của nhà trường để giải đáp câu hỏi này. Bạn vui lòng kiểm tra lại bảng tin chính thức hoặc hỏi văn phòng trường nhé!",
-            "source": None,
-            "file_url": None,
-            "time_info": None,
-            "is_expired": False
-        })
-
-# ----------------------------------------------------
-# 3. API Tải tệp lên (/upload) - BẢO MẬT & BÓC TÁCH CHUẨN
-# ----------------------------------------------------
-@app.route("/upload", methods=["POST"])
+@app.route('/upload', methods=['POST'])
 def upload_file():
-    # 🔒 BẢO VỆ MÁY CHỦ: BẮT BUỘC CÓ MẬT MÃ QUẢN TRỊ
-    provided_key = request.headers.get("X-Admin-Key") or request.form.get("admin_key")
-    if provided_key != ADMIN_SECRET_KEY:
-        return jsonify({
-            "success": False, 
-            "message": "Từ chối truy cập: Bạn không có quyền tải tài liệu lên hệ thống!"
-        }), 403
+    """Xử lý nạp văn bản Word (.docx) hoặc PDF (.pdf)"""
+    # 1. Kiểm tra xác thực mật mã
+    admin_key = request.headers.get("X-Admin-Key") or request.form.get("admin_key", "")
+    if admin_key.strip() != ADMIN_SECRET_KEY:
+        return jsonify({"success": False, "message": "Sai mật mã quản trị hoặc bạn không có quyền!"}), 403
 
     if 'file' not in request.files:
-        return jsonify({"success": False, "message": "Không tìm thấy tệp gửi lên."}), 400
-    
-    file = request.files['file']
-    if not file or file.filename == '':
-        return jsonify({"success": False, "message": "Chưa chọn tệp tin."}), 400
+        return jsonify({"success": False, "message": "Không tìm thấy tệp đính kèm!"}), 400
 
+    file = request.files['file']
     filename = file.filename
+    if not filename:
+        return jsonify({"success": False, "message": "Tên tệp không hợp lệ!"}), 400
+
+    # 2. Lưu file vào thư mục tailieu/
     save_path = os.path.join(UPLOAD_FOLDER, filename)
     file.save(save_path)
 
     doc_text = ""
-    title_text = f"Văn bản: {filename}"
+    title_text = filename
 
-    # 1. Đọc tệp Word (.docx)
+    # 3. Đọc và trích xuất nội dung
+    # 👉 Xử lý file Word (.docx) - ĐÃ SỬA LỖI SLICE INDEX:
     if filename.lower().endswith(".docx"):
         try:
             doc = Document(save_path)
             paragraphs = [p.text.strip() for p in doc.paragraphs if p.text.strip()]
             if paragraphs:
+                # Lấy đoạn văn đầu tiên (phần tử số 0), cắt tối đa 90 ký tự
                 title_text = paragraphs[0][:90].strip()
                 doc_text = " ".join(paragraphs)
         except Exception as e:
             return jsonify({"success": False, "message": f"Lỗi đọc file Word: {e}"}), 500
 
-    # 2. Đọc tệp PDF (.pdf)
+    # 👉 Xử lý file PDF (.pdf):
     elif filename.lower().endswith(".pdf"):
         try:
             reader = PdfReader(save_path)
@@ -326,42 +183,146 @@ def upload_file():
             
             if pdf_pages_text:
                 doc_text = " ".join(pdf_pages_text)
-                lines = [l.strip() for l in pdf_pages_text.splitlines() if l.strip()]
+                lines = [l.strip() for l in pdf_pages_text[0].splitlines() if l.strip()]
                 if lines:
                     title_text = lines[0][:90].strip()
         except Exception as e:
             return jsonify({"success": False, "message": f"Lỗi đọc file PDF: {e}"}), 500
-
     else:
-        doc_text = f"Thông báo: {filename}"
+        return jsonify({"success": False, "message": "Chỉ hỗ trợ file định dạng .docx hoặc .pdf!"}), 400
 
-    extracted_time = extract_dates(doc_text)
-    is_exp, status_str = check_expiration(extracted_time)
+    if not doc_text:
+        return jsonify({"success": False, "message": "Tệp không có nội dung chữ hoặc không trích xuất được!"}), 400
 
-    current_knowledge = load_knowledge()
+    # 4. Trích xuất thông tin ngày tháng bằng Regex
+    time_match = re.search(r'(ngày\s+\d{1,2}\s+tháng\s+\d{1,2}(?:\s+năm\s+\d{4})?|từ\s+ngày.*?đến\s+ngày.*?\d{4}|tháng\s+\d{1,2}\s+năm\s+\d{4})', doc_text, re.IGNORECASE)
+    time_info = time_match.group(0) if time_match else "Đang cập nhật"
 
-    new_item = {
-        "id": len(current_knowledge) + 1,
-        "ten_tai_lieu": str(title_text),
-        "duong_dan_file": f"tailieu/{filename}",
-        "thoi_gian_to_chuc": str(extracted_time),
-        "chu_de": "Thông báo cập nhật mới",
-        "noi_dung": str(doc_text) if doc_text else f"Văn bản {filename} vừa được cập nhật vào hệ thống."
+    # 5. Lưu vào danh sách data.json
+    db = load_data()
+    # Đường dẫn file dạng tương đối chuẩn hóa 'tailieu/ten_file.ext'
+    rel_file_path = f"tailieu/{filename}".replace("\\", "/")
+
+    # Kiểm tra xem tài liệu cùng tên đã có chưa để cập nhật thay vì trùng lặp
+    existing_index = next((i for i, item in enumerate(db) if item.get("duong_dan_file") == rel_file_path or item.get("tieu_de") == title_text), -1)
+
+    new_entry = {
+        "tieu_de": title_text,
+        "noi_dung": doc_text,
+        "thoi_gian": time_info,
+        "duong_dan_file": rel_file_path
     }
 
-    current_knowledge.append(new_item)
-    
-    with open(DATA_FILE, "w", encoding="utf-8") as f:
-        json.dump(current_knowledge, f, ensure_ascii=False, indent=2)
+    if existing_index >= 0:
+        db[existing_index] = new_entry
+    else:
+        db.append(new_entry)
+
+    save_data(db)
+
+    # 6. GIẢI PHÁP 2: TỰ ĐỘNG ĐẨY FILE VÀ DATA.JSON LÊN GITHUB
+    try:
+        with open(save_path, "rb") as f:
+            push_to_github(f"tailieu/{filename}", f.read(), f"Giao vien nap van ban: {filename}")
+        with open(DATA_FILE, "rb") as f:
+            push_to_github("data.json", f.read(), f"Cap nhat data.json sau khi them: {filename}")
+    except Exception as e:
+        print(f"Lỗi khi đồng bộ GitHub: {e}")
 
     return jsonify({
-        "success": True, 
-        "message": "Đã trích xuất và nạp văn bản thành công!",
-        "filename": filename,
+        "success": True,
+        "message": "Nạp tài liệu và trích xuất dữ liệu thành công!",
         "title": title_text,
-        "time_info": status_str
+        "time_info": time_info
     })
 
-if __name__ == "__main__":
+# ==========================================================
+# CỔNG HỌC SINH: HỎI ĐÁP VỚI TRỢ LÝ AI (ASK)
+# ==========================================================
+
+@app.route('/ask', methods=['POST'])
+def ask():
+    """Tiếp nhận câu hỏi từ học sinh, tìm kiếm tài liệu và hỏi Gemini"""
+    req = request.get_json(silent=True) or {}
+    question = req.get("question", "").strip()
+
+    if not question:
+        return jsonify({"answer": "Bạn hãy nhập câu hỏi để mình hỗ trợ nhé!", "source": None, "file_url": None})
+
+    db = load_data()
+    if not db:
+        return jsonify({
+            "answer": "Hiện tại hệ thống nhà trường chưa có dữ liệu văn bản nào. Thầy cô vui lòng vào Cổng Giáo Viên để nạp tài liệu nhé!",
+            "source": None,
+            "file_url": None
+        })
+
+    # Tìm kiếm văn bản liên quan dựa trên từ khóa câu hỏi
+    query_words = [w.lower() for w in re.findall(r'\w+', question) if len(w) > 1]
+    best_doc = None
+    max_score = 0
+
+    for doc in db:
+        text = (doc.get("tieu_de", "") + " " + doc.get("noi_dung", "")).lower()
+        score = sum(1 for word in query_words if word in text)
+        if score > max_score:
+            max_score = score
+            best_doc = doc
+
+    # Nếu không tìm thấy văn bản phù hợp
+    if not best_doc or max_score == 0:
+        return jsonify({
+            "answer": "Xin lỗi bạn, mình chưa tìm thấy thông tin này trong các văn bản, kế hoạch chính thức hiện có của nhà trường.",
+            "source": None,
+            "file_url": None
+        })
+
+    # Chuẩn bị dữ liệu và URL văn bản gốc chuẩn hóa
+    file_path = str(best_doc.get("duong_dan_file", "")).strip()
+    if file_path:
+        clean_path = file_path.replace("\\", "/").lstrip("/")
+        full_file_url = f"/{clean_path}"
+    else:
+        full_file_url = None
+
+    source_title = best_doc.get("tieu_de", "Văn bản nhà trường")
+
+    # Tạo Prompt đối soát cho Gemini
+    prompt = f"""Bạn là Trợ lý AI học đường thân thiện, chính xác của trường THPT.
+Nhiệm vụ của bạn là giải đáp thắc mắc cho học sinh chỉ dựa trên thông tin chính thức dưới đây.
+
+--- THÔNG TIN VĂN BẢN TRƯỜNG ---
+Tiêu đề: {best_doc.get('tieu_de')}
+Thời gian/Thời hạn: {best_doc.get('thoi_gian')}
+Nội dung văn bản:
+{best_doc.get('noi_dung')[:3500]}
+--------------------------------
+
+Câu hỏi của học sinh: "{question}"
+
+Yêu cầu khi trả lời:
+1. Xưng hô thân thiện ('mình' và 'bạn').
+2. Trả lời đúng trọng tâm, ngắn gọn, dễ hiểu dựa trên văn bản trên.
+3. Nếu văn bản không nhắc đến chi tiết học sinh hỏi, hãy nói rõ là văn bản chưa đề cập, không được tự suy đoán.
+"""
+
+    try:
+        model = genai.GenerativeModel('gemini-1.5-flash')
+        response = model.generate_content(prompt)
+        ai_reply = response.text.strip()
+    except Exception as e:
+        print(f"Lỗi gọi Gemini API: {e}")
+        ai_reply = f"Dựa trên văn bản '{source_title}': Thời gian diễn ra là {best_doc.get('thoi_gian')}."
+
+    return jsonify({
+        "answer": ai_reply,
+        "source": source_title,
+        "file_url": full_file_url
+    })
+
+# ==========================================================
+# KHỞI CHẠY MÁY CHỦ (HỖ TRỢ CẢ LOCALHOST VÀ RENDER)
+# ==========================================================
+if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port)
+    app.run(host="0.0.0.0", port=port, debug=False)
