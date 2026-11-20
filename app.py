@@ -151,7 +151,9 @@ def verify_admin():
 
 @app.route('/tailieu/<path:filename>', methods=['GET'])
 def serve_file(filename):
-    return send_from_directory(UPLOAD_FOLDER, filename)
+    # Xử lý chuẩn hóa tên file để tránh lỗi dấu gạch chéo ngược trên Windows
+    safe_filename = filename.replace("\\", "/").split("/")[-1]
+    return send_from_directory(UPLOAD_FOLDER, safe_filename, as_attachment=False)
 
 # ----------------------------------------------------
 # 2. Tuyến đường Hỏi đáp (/ask)
